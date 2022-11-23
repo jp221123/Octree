@@ -3,29 +3,16 @@
 #include <glm/glm.hpp>
 
 #include "shader.h"
-#include "sphere.h"
+#include "object.h"
 
 #include <array>
 #include <vector>
 #include <unordered_set>
 
-struct Box {
-	std::array<float, 3> mins;
-	std::array<float, 3> maxs;
-	Box() {}
-	Box(float x1, float y1, float z1, float x2, float y2, float z2)
-		: mins{ x1, y1, z1 }, maxs{ x2, y2, z2 }{}
-	Box(const std::array<float, 3>& mins, const std::array<float, 3>& maxs)
-		: mins(mins), maxs(maxs) {}
-	Box(const Box& box)
-		: mins(box.mins), maxs(box.maxs) {}
-	std::array<float, 3> getCenter() const;
-};
-
 class OctreeNode {
 private:
-	static constexpr int CAPACITY = 30;
-	std::unordered_set<Sphere*> spheres;
+	static constexpr int CAPACITY = 10;
+	std::unordered_set<SolidBody*> objects;
 	int count{0};
 	const std::array<float, 3> center;
 	Box boundary;
@@ -49,14 +36,14 @@ public:
 	void init();
 
 	void draw(const glm::mat4& projMat, const glm::mat4& viewMat);
-	bool insert(Sphere* sphere);
-	void remove(Sphere* sphere); // assumes sphere is in the octree
-	bool intersects(Sphere* sphere);
-	bool isInBoundary(Sphere* sphere, const float MARGIN = 0.01);
+	bool insert(SolidBody* object, bool isSafe = false);
+	bool update(SolidBody* object); // assumes object is in the octree
+	void remove(SolidBody* object); // assumes object is in the octree
+	bool intersects(SolidBody* object);
 private:
 	const Box boundary;
 	OctreeNode* root;
-	std::unordered_set<Sphere*> spheres;
+	std::unordered_set<SolidBody*> objects;
 
 	const glm::vec3 lineColor{ 0.7f, 0.7f, 0.7f };
 	std::vector<GLfloat> vertices;
@@ -77,9 +64,8 @@ private:
 	std::vector<int> deletedVIndex;
 	std::vector<OctreeNode*> nodeList; // index buffer is configured in the order in node list
 	OctreeNode* makeNode(const std::array<float, 3>& center, const Box& boundary);
-	void insert(OctreeNode* node, Sphere* sphere);
-	bool remove(OctreeNode* node, Sphere* sphere);
+	void insert(OctreeNode* node, SolidBody* object);
+	bool remove(OctreeNode* node, SolidBody* object);
 	void clean(OctreeNode* node);
-	bool intersects(OctreeNode* node, Sphere* sphere);
-	bool intersects(const Sphere* sphere, const Box& box);
+	bool intersects(OctreeNode* node, SolidBody* object);
 };

@@ -9,8 +9,27 @@
 
 #include <random>
 
+struct Box {
+    std::array<float, 3> mins;
+    std::array<float, 3> maxs;
+    Box() {}
+    Box(float x1, float y1, float z1, float x2, float y2, float z2)
+        : mins{ x1, y1, z1 }, maxs{ x2, y2, z2 }{}
+    Box(const std::array<float, 3>& mins, const std::array<float, 3>& maxs)
+        : mins(mins), maxs(maxs) {}
+    Box(const Box& box)
+        : mins(box.mins), maxs(box.maxs) {}
+    std::array<float, 3> getCenter() const;
+};
+
+enum class SolidBodyType {
+    SPHERE,
+    CUBE,
+};
+
 class SolidBody {
 protected:
+    const SolidBodyType classType;
     int stateIndex{ 0 };
     std::array<glm::mat4, 2> model{ glm::mat4(1.0f),  };
     // assume all scales are done before rotations, and then translations
@@ -21,8 +40,9 @@ protected:
 	GLuint vertexArrayID;
     glm::vec3 ambientColor, diffuseColor, specularColor;
     float shininess;
+    bool isDirty{ true };
 public:
-    SolidBody(Mesh& mesh, std::mt19937& rng);
+    SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType);
 
     const glm::mat4 modelMatrix() const { return model[stateIndex]; }
     const glm::vec3 getWorldPosition() const { return worldPos[stateIndex]; }
@@ -32,9 +52,16 @@ public:
     void draw(const SolidBodyShader& shader, const glm::mat4& projMat, const glm::mat4& viewMat);
 
     void scale(float s);
-    void translate(glm::vec3 t);
+    void translate(const glm::vec3& t);
     //void update();
     //void rotate(glm::vec3 axis, float degrees);
+
+    // for safety, overestimate the boundary of the object
+    bool intersects(const SolidBody* other, const float MARGIN = 0.01f);
+    // for safety, underestimate the boundary of the object
+    bool intersects(const Box& box, const float MARGIN = -0.000'01f);
+    // for safety, overestimate the boundary of the object
+    bool containedInBoundary(const Box& box, const float MARGIN = 0.01f);
 private:
     void update();
     void makeColor(std::mt19937& rng);

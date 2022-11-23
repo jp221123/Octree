@@ -1,10 +1,12 @@
 #include "object.h"
+#include "sphere.h"
+#include "cube.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 
-SolidBody::SolidBody(Mesh& mesh, std::mt19937& rng)
-    : vertexArrayID(mesh.getVertexArrayID()), numTriangles(mesh.getNumTriangles()) {
+SolidBody::SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType)
+    : vertexArrayID(mesh.getVertexArrayID()), numTriangles(mesh.getNumTriangles()), classType(classType) {
     makeColor(rng);
 }
 
@@ -24,6 +26,8 @@ void SolidBody::makeColor(std::mt19937& rng){
 
 void SolidBody::revert(){
     stateIndex = 1 - stateIndex;
+
+    isDirty = true;
 }
 
 // not used for now
@@ -41,18 +45,23 @@ void SolidBody::scale(float s) {
     scaledFactor[1-stateIndex] = s * scaledFactor[stateIndex];
     worldPos[1 - stateIndex] = worldPos[stateIndex];
     stateIndex = 1 - stateIndex;
+
+    isDirty = true;
 }
 
-void SolidBody::translate(glm::vec3 t) {
+void SolidBody::translate(const glm::vec3& t) {
     model[1-stateIndex] = glm::translate(t) * model[stateIndex];
     scaledFactor[1 - stateIndex] = scaledFactor[stateIndex];
     worldPos[1-stateIndex] = worldPos[stateIndex] + t;
     stateIndex = 1 - stateIndex;
+
+    isDirty = true;
 }
 
 // not used for now
 //void SolidBody::rotate(glm::vec3 axis, float degrees) {
 //    model = glm::rotate(glm::radians(degrees), axis) * model;
+// isDirty = true;
 //}
 
 void SolidBody::draw(const SolidBodyShader& shader, const glm::mat4& projMat, const glm::mat4& viewMat) {
@@ -73,7 +82,7 @@ void SolidBody::draw(const SolidBodyShader& shader, const glm::mat4& projMat, co
     glBindVertexArray(vertexArrayID);
 
     // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL).
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
     glDrawElements(
         GL_TRIANGLES,      // mode
         numTriangles*3,    // count
@@ -104,4 +113,134 @@ void SolidBody::updatePosition(Window& window, Camera& camera, double t) {
     updatePositionKey(GLFW_KEY_D, camera.right*sd);
 
     translate(trans);
+}
+
+bool intersectss(const Sphere& sphere, const Sphere& other, const float MARGIN) {
+    glm::vec3 diff = sphere.center() - other.center();
+    float dist = glm::length(diff);
+    return dist < sphere.radius() + other.radius() + MARGIN;
+}
+
+bool intersectss(const Sphere& sphere, const Box& box, const float MARGIN) {
+    // each dimension is divided by 3: left-outside, inside, right-outside
+    // so the box subdivides the whole space by 27 pieces
+    // sign = -1, 0, 1
+    // sign = -1 -> coordinate to compare is mins
+    // sign = 0 -> coordinate to compare is itself
+    // sign = 1 -> maxs
+    // compare the distance to radius
+
+    std::array<float, 3> closestPoint;
+    for (int i = 0; i < 3; i++) {
+        if (sphere.center()[i] < box.mins[i])
+            closestPoint[i] = box.mins[i];
+        else if (sphere.center()[i] > box.maxs[i])
+            closestPoint[i] = box.maxs[i];
+        else
+            closestPoint[i] = sphere.center()[i];
+    }
+    glm::vec3 diff;
+    for (int i = 0; i < 3; i++)
+        diff[i] = closestPoint[i] - sphere.center()[i];
+    float dist = glm::length(diff);
+    return dist < sphere.radius() + MARGIN;
+}
+
+bool intersectss(const Box& box1, const Box& box2, const float MARGIN) {
+    auto isVertexContained = [&](const Box& box1, const Box& box2) {
+        for (int i = 0; i < 3; i++) {
+            if (box2.mins[i] < box1.mins[i] + MARGIN && box1.mins[i] - MARGIN < box2.maxs[i])
+                continue;
+            if (box2.mins[i] < box1.maxs[i] + MARGIN && box1.maxs[i] - MARGIN < box2.maxs[i])
+                continue;
+            return false;
+        }
+        return true;
+    };
+    return isVertexContained(box1, box2) || isVertexContained(box2, box1);
+}
+
+bool SolidBody::intersects(const SolidBody* other, const float MARGIN){
+    switch (classType) {
+    case SolidBodyType::CUBE: {
+        Cube* cube = (Cube*)this;
+        switch (other->classType) {
+        case SolidBodyType::CUBE: {
+            Cube* cube2 = (Cube*)other;
+            return intersectss(cube->boundary(), cube2->boundary(), MARGIN);
+        }
+        case SolidBodyType::SPHERE: {
+            Sphere* sphere2 = (Sphere*)other;
+            return intersectss(*sphere2, cube->boundary(), MARGIN);
+        }
+        }
+        break;
+    }
+    case SolidBodyType::SPHERE: {
+        Sphere* sphere = (Sphere*)this;
+        switch (other->classType) {
+        case SolidBodyType::CUBE: {
+            Cube* cube2 = (Cube*)other;
+            return intersectss(*sphere, cube2->boundary(), MARGIN);
+        }
+        case SolidBodyType::SPHERE: {
+            Sphere* sphere2 = (Sphere*)other;
+            return intersectss(*sphere, *sphere2, MARGIN);
+        }
+        }
+        break;
+    }
+    }
+    assert(false);
+    return true;
+}
+
+bool SolidBody::intersects(const Box& box, const float MARGIN){
+    switch (classType) {
+    case SolidBodyType::CUBE: {
+        Cube* cube = (Cube*)this;
+        return intersectss(cube->boundary(), box, MARGIN);
+    }
+    case SolidBodyType::SPHERE: {
+        Sphere* sphere = (Sphere*)this;
+        return intersectss(*sphere, box, MARGIN);
+    }
+    }
+    assert(false);
+    return true;
+}
+
+bool isInBoundary(const Sphere& object, const Box& box, const float MARGIN) {
+    for (int i = 0; i < 3; i++) {
+        if (object.center()[i] + object.radius() > box.maxs[i] - MARGIN)
+            return false;
+        if (object.center()[i] - object.radius() < box.mins[i] + MARGIN)
+            return false;
+    }
+    return true;
+}
+
+bool isInBoundary(const Cube& object, const Box& box, const float MARGIN) {
+    for (int i = 0; i < 3; i++) {
+        if (object.center()[i] + object.halfside() > box.maxs[i] - MARGIN)
+            return false;
+        if (object.center()[i] - object.halfside() < box.mins[i] + MARGIN)
+            return false;
+    }
+    return true;
+}
+
+bool SolidBody::containedInBoundary(const Box& box, const float MARGIN) {
+    switch (classType) {
+    case SolidBodyType::CUBE: {
+        Cube* cube = (Cube*)this;
+        return isInBoundary(*cube, box, MARGIN);
+    }
+    case SolidBodyType::SPHERE: {
+        Sphere* sphere = (Sphere*)this;
+        return isInBoundary(*sphere, box, MARGIN);
+    }
+    }
+    assert(false);
+    return false;
 }

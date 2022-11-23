@@ -2,32 +2,6 @@
 
 #include <iostream>
 
-bool Octree::intersects(const Sphere* sphere, const Box& box) {
-    // each dimension is divided by 3: left-outside, inside, right-outside
-    // so the box subdivides the whole space by 27 pieces
-    // sign = -1, 0, 1
-    // sign = -1 -> coordinate to compare is mins
-    // sign = 0 -> coordinate to compare is itself
-    // sign = 1 -> maxs
-    // compare the distance to radius
-
-    std::array<float, 3> closestPoint;
-    for (int i = 0; i < 3; i++) {
-        if (sphere->center()[i] < box.mins[i])
-            closestPoint[i] = box.mins[i];
-        else if (sphere->center()[i] > box.maxs[i])
-            closestPoint[i] = box.maxs[i];
-        else
-            closestPoint[i] = sphere->center()[i];
-    }
-    constexpr float EPS = 0.001;
-    glm::vec3 diff;
-    for (int i = 0; i < 3; i++)
-        diff[i] = closestPoint[i] - sphere->center()[i];
-    float dist = glm::length(diff);
-    return dist + EPS < sphere->radius();
-}
-
 OctreeNode::OctreeNode(const std::array<float, 3>& center, const Box& boundary, int nodeID, int vIndex, std::vector<OctreeNode*>& nodeList)
     : center(center), boundary(boundary), nodeID(nodeID), vIndex(vIndex), subBoxes(makeSubBoxes(center, boundary)) {
     nodeList.push_back(this);
@@ -143,76 +117,68 @@ OctreeNode* Octree::makeNode(const std::array<float, 3>& center, const Box& boun
 }
 
 int dbgcnt = 0;
-// assumption: node's boundary intersects with sphere
-void Octree::insert(OctreeNode* node, Sphere* sphere) {
+// assumption: node's boundary intersects with object
+void Octree::insert(OctreeNode* node, SolidBody* object) {
     dbgcnt++;
     // go down and make node if necessary
-    auto explore = [&](Sphere* sphere) {
+    auto explore = [&](SolidBody* object) {
         for (int i = 0; i < 1 << 3; i++) {
             auto& box = node->subBoxes[i];
-            if (intersects(sphere, box)) {
+            if (object->intersects(box)) {
                 if (node->children[i] == nullptr)
                     node->children[i] = makeNode(box.getCenter(), box);
-                insert(node->children[i], sphere);
+                insert(node->children[i], object);
             }
         }
     };
 
     if (node->isLeaf()) {
         node->count++;
-        node->spheres.insert(sphere);
+        node->objects.insert(object);
         if (node->count <= node->CAPACITY)
             return;
 
-        // node->count > node->CAPACITY, have to push down all spheres
-        for (auto sphere : node->spheres)
-            explore(sphere);
-        node->spheres.clear();
+        // node->count > node->CAPACITY, have to push down all objects
+        for (auto object : node->objects)
+            explore(object);
+        node->objects.clear();
     }
     else {
         node->count++;
-        explore(sphere);
+        explore(object);
     }
 }
 
-bool Octree::insert(Sphere* sphere){
+bool Octree::insert(SolidBody* object, bool isSafe){
     dbgcnt = 0;
-    if (spheres.count(sphere)) {
-        std::cerr << "the sphere had already been added" << std::endl;
+    if (objects.count(object)) {
+        std::cerr << "the object had already been added" << std::endl;
         return false;
     }
-    if (!isInBoundary(sphere))
-        return false;
-    if (intersects(sphere))
-        return false;
+    if (!isSafe) {
+        if (!object->containedInBoundary(boundary))
+            return false;
+        if (intersects(object))
+            return false;
+    }
 
     if (root == nullptr)
         root = makeNode({ 0.0f, 0.0f, 0.0f }, boundary);
-    insert(root, sphere);
+    insert(root, object);
 
-    spheres.insert(sphere);
+    objects.insert(object);
     isDirty = true;
 
     return true;
 }
 
-bool Octree::isInBoundary(Sphere* sphere, const float MARGIN) {
-    for (int i = 0; i < 3; i++) {
-        if (sphere->center()[i] + sphere->radius() > boundary.maxs[i] - MARGIN)
-            return false;
-        if(sphere->center()[i] - sphere->radius() < boundary.mins[i] - MARGIN)
-            return false;
-    }
-    return true;
-}
-
-bool Octree::intersects(OctreeNode* node, Sphere* sphere) {
+bool Octree::intersects(OctreeNode* node, SolidBody* object) {
     dbgcnt++;
-    if (!intersects(sphere, node->boundary))
+    if (!object->intersects(node->boundary))
         return false;
     if (node->isLeaf()) {
-        for (auto sphere2 : node->spheres) {
-            if (sphere2->intersects(sphere))
+        for (auto object2 : node->objects) {
+            if(object2 != object && object2->intersects(object))
                 return true;
         }
         return false;
@@ -221,18 +187,18 @@ bool Octree::intersects(OctreeNode* node, Sphere* sphere) {
         for (int i = 0; i < 1 << 3; i++) {
             if (node->children[i] == nullptr)
                 continue;
-            if (intersects(node->children[i], sphere))
+            if (intersects(node->children[i], object))
                 return true;
         }
         return false;
     }
 }
 
-bool Octree::intersects(Sphere* sphere) {
+bool Octree::intersects(SolidBody* object) {
     dbgcnt = 0;
     if (root == nullptr)
         return false;
-    return intersects(root, sphere);
+    return intersects(root, object);
 }
 
 // remove all nodes under node
@@ -268,16 +234,16 @@ void Octree::clean(OctreeNode* node) {
 }
 
 // if true, the node had been deleted
-bool Octree::remove(OctreeNode* node, Sphere* sphere) {
+bool Octree::remove(OctreeNode* node, SolidBody* object) {
     dbgcnt++;
-    if (!intersects(sphere, node->boundary))
+    if (!object->intersects(node->boundary))
         return false;
 
-    // now assume that sphere had been added to node
+    // now assume that object had been added to node
     if (node->isLeaf()) {
         // still leaf
         node->count--;
-        node->spheres.erase(sphere);
+        node->objects.erase(object);
         if (node->count == 0) {
             clean(node);
             return true;
@@ -289,7 +255,7 @@ bool Octree::remove(OctreeNode* node, Sphere* sphere) {
             for (int i = 0; i < 1 << 3; i++) {
                 if (node->children[i] == nullptr)
                     continue;
-                node->spheres.insert(node->children[i]->spheres.begin(), node->children[i]->spheres.end());
+                node->objects.insert(node->children[i]->objects.begin(), node->children[i]->objects.end());
                 clean(node->children[i]);
                 node->children[i] = nullptr;
             }
@@ -298,7 +264,7 @@ bool Octree::remove(OctreeNode* node, Sphere* sphere) {
             for (int i = 0; i < 1 << 3; i++) {
                 if (node->children[i] == nullptr)
                     continue;
-                if (remove(node->children[i], sphere))
+                if (remove(node->children[i], object))
                     node->children[i] = nullptr;
             }
         }
@@ -306,17 +272,30 @@ bool Octree::remove(OctreeNode* node, Sphere* sphere) {
     return false;
 }
 
-void Octree::remove(Sphere* sphere) {
+void Octree::remove(SolidBody* object) {
     dbgcnt = 0;
-    if (root == nullptr || !spheres.count(sphere)) {
-        std::cerr << "can't find the sphere to remove" << std::endl;
+    if (root == nullptr || !objects.count(object)) {
+        std::cerr << "can't find the object to remove" << std::endl;
         return;
     }
-    if (remove(root, sphere))
+    if (remove(root, object))
         root = nullptr;
 
-    spheres.erase(sphere);
+    objects.erase(object);
     isDirty = true;
+}
+
+bool Octree::update(SolidBody* object)
+{
+    if (!object->containedInBoundary(boundary))
+        return false;
+    if (intersects(object))
+        return false;
+
+    remove(object);
+    bool res = insert(object, true);
+    assert(res);
+    return res;
 }
 
 void Octree::init(){

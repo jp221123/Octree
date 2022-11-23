@@ -10,6 +10,8 @@
 #include "mesh_cube.h"
 #include "mesh_triangle.h"
 #include "object.h"
+#include "sphere.h"
+#include "cube.h"
 #include "octree.h"
 
 #include <iostream>
@@ -24,7 +26,8 @@ CubeMesh cubeMesh;
 TriangleMesh triangleMesh;
 std::vector<SphereMesh> sphereMesh;
 
-Octree octree(10.0);
+constexpr float MAX_COORDINATE = 10.0f;
+Octree octree(MAX_COORDINATE);
 std::vector<std::unique_ptr<SolidBody>> objects;
 int main() {
     if (!initGL())
@@ -117,15 +120,39 @@ int initObject() {
     for(int i=0; i<=MAX_SUBDIVISION; i++)
         sphereMesh.push_back(SphereMesh(rng, i));
 
-    constexpr int N = 10000;
-    std::uniform_real_distribution<float> rDist(0.01, 0.2);
-    std::uniform_real_distribution<float> tDist(-5.0, 5.0);
+    constexpr int N = 1000;
+    constexpr float MIN_SCALE = 0.001;
+    constexpr float MAX_SCALE = 1.0;
+
+    std::uniform_real_distribution<float> rDist(MIN_SCALE, MAX_SCALE);
+    std::uniform_real_distribution<float> tDist(-MAX_COORDINATE + MAX_SCALE * 2, MAX_COORDINATE - MAX_SCALE * 2);
+    std::uniform_int_distribution<int> dist(0, 1);
     for (int i = 0; i < N; i++) {
         while (true) {
-            objects.push_back(std::make_unique<Sphere>(sphereMesh[3], rng));
-            Sphere* object = (Sphere*)objects.back().get();
-            object->scale(rDist(rng));
-            object->translate({ tDist(rng), tDist(rng), tDist(rng) });
+            int type = dist(rng);
+            type = 0;
+            float scale = rDist(rng);
+            // cube -> 2*2*2 = 8
+            // sphere -> 4/3pi ~ 4
+            if (type == 1)
+                scale /= 1.25f;
+            glm::vec3 trans = { tDist(rng), tDist(rng), tDist(rng) };
+            int subdivision = 4;
+            {
+                float r = 0.5f;
+                while (scale < r && subdivision > 0) {
+                    r /= 3;
+                    subdivision--;
+                }
+            }
+
+            if (type == 0)
+                objects.push_back(std::make_unique<Sphere>(sphereMesh[subdivision], rng));
+            else
+                objects.push_back(std::make_unique<Cube>(cubeMesh, rng));
+            auto object = objects.back().get();
+            object->scale(scale);
+            object->translate(trans);
 
             // brute-force test
             //bool ok = true;
@@ -168,16 +195,9 @@ void update() {
     // ii) the object does not colide with other objects
     const auto& clickedObjects = objects;
     for (auto& object : clickedObjects) {
-        auto sphere = (Sphere*)object.get();
-
-        octree.remove(sphere);
-        sphere->updatePosition(window, camera, t);
-        if (!octree.insert(sphere)) {
-            sphere->revert();
-            if (!octree.insert(sphere)) {
-                std::cerr << "unreachable" << std::endl;
-            }
-        }
+        object->updatePosition(window, camera, t);
+        if (!octree.update(object.get()))
+            object->revert();
     }
 
     for (int key : {GLFW_KEY_W, GLFW_KEY_S, GLFW_KEY_A, GLFW_KEY_D})
