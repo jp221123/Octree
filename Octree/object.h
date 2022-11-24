@@ -44,8 +44,7 @@ protected:
 public:
     SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType);
 
-    const glm::mat4 modelMatrix() const { return model[stateIndex]; }
-    const glm::vec3 getWorldPosition() const { return worldPos[stateIndex]; }
+    const glm::mat4& modelMatrix() const { return model[stateIndex]; }
     void updatePosition(Window& window, Camera& camera, double t);
     void revert();
 
@@ -65,4 +64,8 @@ public:
 private:
     void update();
     void makeColor(std::mt19937& rng);
+
+    friend std::ostream& operator<<(std::ostream& os, const SolidBody&);
 };
+
+std::ostream& operator<<(std::ostream& os, const SolidBody&);

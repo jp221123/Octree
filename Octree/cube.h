@@ -17,3 +17,5 @@ public:
 	const glm::vec3& center() const { return worldPos[stateIndex]; }
 	float halfside() const { return scaledFactor[stateIndex]; }
 };
+
+std::ostream& operator<<(std::ostream& os, const Cube& cube);

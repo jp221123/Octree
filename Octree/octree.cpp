@@ -120,6 +120,7 @@ int dbgcnt = 0;
 // assumption: node's boundary intersects with object
 void Octree::insert(OctreeNode* node, SolidBody* object) {
     dbgcnt++;
+
     // go down and make node if necessary
     auto explore = [&](SolidBody* object) {
         for (int i = 0; i < 1 << 3; i++) {
@@ -133,15 +134,18 @@ void Octree::insert(OctreeNode* node, SolidBody* object) {
     };
 
     if (node->isLeaf()) {
+        assert(node->count == node->objects.size());
         node->count++;
         node->objects.insert(object);
-        if (node->count <= node->CAPACITY)
-            return;
 
-        // node->count > node->CAPACITY, have to push down all objects
-        for (auto object : node->objects)
-            explore(object);
-        node->objects.clear();
+        if (node->isLeaf())
+            return;
+        else {
+            // have to push down all objects
+            for (auto object : node->objects)
+                explore(object);
+            node->objects.clear();
+        }
     }
     else {
         node->count++;
@@ -204,7 +208,7 @@ bool Octree::intersects(SolidBody* object) {
 // remove all nodes under node
 // overwrite the vbo and ibo
 // -- move the last vertices and indices
-void Octree::clean(OctreeNode* node) {
+std::unordered_set<SolidBody*> Octree::clean(OctreeNode* node) {
     dbgcnt++;
     int iIndex = node->nodeID * 15 * 2 + 12 * 2;
     deletedVIndex.push_back(indices[iIndex] * 3);
@@ -228,9 +232,13 @@ void Octree::clean(OctreeNode* node) {
     for (int i = 0; i < 1 << 3; i++) {
         if (node->children[i] == nullptr)
             continue;
-        clean(node->children[i]);
+        auto childrenObjects = clean(node->children[i]);
+        node->objects.insert(childrenObjects.begin(), childrenObjects.end());
     }
+    std::unordered_set<SolidBody*> res;
+    std::swap(res, node->objects);
     delete node;
+    return res;
 }
 
 // if true, the node had been deleted
@@ -241,26 +249,30 @@ bool Octree::remove(OctreeNode* node, SolidBody* object) {
 
     // now assume that object had been added to node
     if (node->isLeaf()) {
-        // still leaf
+        assert(node->count == node->objects.size());
         node->count--;
         node->objects.erase(object);
-        if (node->count == 0) {
-            clean(node);
-            return true;
-        }
     }
     else {
-        // non-leaf to leaf
-        if (node->count == node->CAPACITY) {
+        node->count--;
+        if (node->isLeaf()) {
+            // have to pull up all objects in children
             for (int i = 0; i < 1 << 3; i++) {
                 if (node->children[i] == nullptr)
                     continue;
-                node->objects.insert(node->children[i]->objects.begin(), node->children[i]->objects.end());
-                clean(node->children[i]);
+                // of course, we have to pull up recursively
+                // node->objects.insert(node->children[i]->objects.begin(), node->children[i]->objects.end());
+                auto objects = clean(node->children[i]);
+                node->objects.insert(objects.begin(), objects.end());
                 node->children[i] = nullptr;
             }
+            node->objects.erase(object);
+            if (node->count != node->objects.size())
+                dump();
+            assert(node->count == node->CAPACITY);
+            assert(node->objects.size() == node->CAPACITY);
         }
-        else { // node->count > node->CAPACITY
+        else{
             for (int i = 0; i < 1 << 3; i++) {
                 if (node->children[i] == nullptr)
                     continue;
@@ -269,7 +281,12 @@ bool Octree::remove(OctreeNode* node, SolidBody* object) {
             }
         }
     }
-    return false;
+    if (node->isEmpty()) {
+        clean(node);
+        return true;
+    }
+    else
+        return false;
 }
 
 void Octree::remove(SolidBody* object) {
@@ -292,7 +309,9 @@ bool Octree::update(SolidBody* object)
     if (intersects(object))
         return false;
 
+    object->revert();
     remove(object);
+    object->revert();
     bool res = insert(object, true);
     assert(res);
     return res;
@@ -413,4 +432,29 @@ void Octree::insertVertex(int index, const std::array<float, 3>& vertex) {
 }
 void Octree::addIndex(int index) {
     indices.push_back(index);
+}
+
+void Octree::dump(OctreeNode* node) {
+    if (node == nullptr)
+        return;
+    std::cout << node << ' ' << node->count << std::endl;
+    std::cout << node->objects.size() << " objects: ";
+    for (auto obj : node->objects)
+        std::cout << obj << ' ';
+    std::cout << std::endl;
+    for (auto child : node->children)
+        std::cout << child << ' ';
+    std::cout << std::endl;
+    std::cout << std::endl;
+
+    for (auto child : node->children)
+        dump(child);
+}
+
+void Octree::dump() {
+    std::cout << std::endl;
+    std::cout << "============= dump start ============" << std::endl;
+    dump(root);
+    std::cout << "============= dump end ==============" << std::endl;
+    std::cout << std::endl;
 }

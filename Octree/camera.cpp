@@ -9,6 +9,12 @@ Camera::Camera(glm::vec3 position):
     updateMatrix();
 }
 
+void Camera::reset() {
+    horizontalAngle = 3.14f;
+    verticalAngle = 0.0f;
+    position = glm::vec3(0, 0, 5);
+}
+
 void Camera::updateMatrix() {
     viewMat = glm::lookAt(
         position,               // camera position
@@ -48,6 +54,4 @@ void Camera::updatePosition(Window& window, double t){
     updatePositionKey(GLFW_KEY_DOWN, -up);
     updatePositionKey(GLFW_KEY_LEFT, -right);
     updatePositionKey(GLFW_KEY_RIGHT, right);
-
-    updateMatrix();
 }

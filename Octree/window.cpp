@@ -9,9 +9,12 @@ Window::Window(GLFWwindow* window):
 }
 
 void Window::updateMatrix(){
-	// Projection matrix : 45¡Æ Field of View, 4:3 ratio, display range : 0.1 unit <-> 100 units
-	projMat = glm::perspective(glm::radians(fov), (float)width / (float)height, 0.1f, 100.0f);
+	projMat = glm::perspective(
+		glm::radians(fov), // fov
+		(float)width / (float)height, // aspect
+		0.1f, // near
+		100.0f); // far
 
-	// Or, for an ortho camera :
-	// glm::ortho(-10.0f,10.0f,-10.0f,10.0f,0.0f,100.0f); // In world coordinates
+	// for an ortho camera :
+	// glm::ortho(-10.0f,10.0f,-10.0f,10.0f,0.0f,100.0f);
 }

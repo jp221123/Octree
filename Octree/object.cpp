@@ -67,7 +67,7 @@ void SolidBody::translate(const glm::vec3& t) {
 void SolidBody::draw(const SolidBodyShader& shader, const glm::mat4& projMat, const glm::mat4& viewMat) {
     glUseProgram(shader.programID);
 
-    glm::mat4 mvMat = viewMat * model[stateIndex];
+    glm::mat4 mvMat = viewMat * modelMatrix();
     glm::mat4 normalMat = glm::transpose(glm::inverse(mvMat));
     glUniformMatrix4fv(shader.pMatID, 1, GL_FALSE, &projMat[0][0]);
     glUniformMatrix4fv(shader.mvMatID, 1, GL_FALSE, &mvMat[0][0]);
@@ -149,9 +149,9 @@ bool intersectss(const Sphere& sphere, const Box& box, const float MARGIN) {
 bool intersectss(const Box& box1, const Box& box2, const float MARGIN) {
     auto isVertexContained = [&](const Box& box1, const Box& box2) {
         for (int i = 0; i < 3; i++) {
-            if (box2.mins[i] < box1.mins[i] + MARGIN && box1.mins[i] - MARGIN < box2.maxs[i])
+            if (box2.mins[i] < box1.mins[i] - MARGIN && box1.mins[i] + MARGIN < box2.maxs[i])
                 continue;
-            if (box2.mins[i] < box1.maxs[i] + MARGIN && box1.maxs[i] - MARGIN < box2.maxs[i])
+            if (box2.mins[i] < box1.maxs[i] - MARGIN && box1.maxs[i] + MARGIN < box2.maxs[i])
                 continue;
             return false;
         }
@@ -243,4 +243,19 @@ bool SolidBody::containedInBoundary(const Box& box, const float MARGIN) {
     }
     assert(false);
     return false;
+}
+
+std::ostream& operator<<(std::ostream& os, const SolidBody& obj) {
+    switch (obj.classType) {
+    case SolidBodyType::CUBE: {
+        Cube* cube = (Cube*)&obj;
+        return os << *cube;
+    }
+    case SolidBodyType::SPHERE: {
+        Sphere* sphere = (Sphere*)&obj;
+        return os << *sphere;
+    }
+    }
+    assert(false);
+    return os;
 }

@@ -120,17 +120,29 @@ int initObject() {
     for(int i=0; i<=MAX_SUBDIVISION; i++)
         sphereMesh.push_back(SphereMesh(rng, i));
 
-    constexpr int N = 1000;
+    makeObjects();
+
+    return true;
+}
+
+int initMisc() {
+
+
+    return true;
+}
+
+void makeObjects() {
+    constexpr int N = 10000;
     constexpr float MIN_SCALE = 0.001;
     constexpr float MAX_SCALE = 1.0;
 
     std::uniform_real_distribution<float> rDist(MIN_SCALE, MAX_SCALE);
     std::uniform_real_distribution<float> tDist(-MAX_COORDINATE + MAX_SCALE * 2, MAX_COORDINATE - MAX_SCALE * 2);
     std::uniform_int_distribution<int> dist(0, 1);
+
     for (int i = 0; i < N; i++) {
         while (true) {
             int type = dist(rng);
-            type = 0;
             float scale = rDist(rng);
             // cube -> 2*2*2 = 8
             // sphere -> 4/3pi ~ 4
@@ -172,14 +184,48 @@ int initObject() {
         }
     }
 
-    return true;
 }
 
-int initMisc() {
-
-
-    return true;
-}
+//std::vector<std::unique_ptr<SolidBody>> tobjects;
+//void twoObjectTest() {
+//    tobjects.clear();
+//    camera.reset();
+//
+//    constexpr float MIN_SCALE = 0.001;
+//    constexpr float MAX_SCALE = 1.0;
+//
+//    std::uniform_real_distribution<float> rDist(MIN_SCALE, MAX_SCALE);
+//    std::uniform_real_distribution<float> tDist(-MAX_COORDINATE + MAX_SCALE * 2, MAX_COORDINATE - MAX_SCALE * 2);
+//    std::uniform_int_distribution<int> dist(0, 1);
+//    tDist = std::uniform_real_distribution<float>(-1, 1);
+//    int type = dist(rng);
+//    float scale = rDist(rng);
+//    glm::vec3 trans = { tDist(rng), tDist(rng), tDist(rng) };
+//    std::unique_ptr<SolidBody> object;
+//    if (type == 0)
+//        object = std::move(std::make_unique<Sphere>(sphereMesh[4], rng));
+//    else
+//        object = std::move(std::make_unique<Cube>(cubeMesh, rng));
+//    object->scale(scale);
+//    object->translate(trans);
+//    type = dist(rng);
+//    scale = rDist(rng);
+//    trans = { tDist(rng), tDist(rng), tDist(rng) };
+//    std::unique_ptr<SolidBody> object2;
+//    if (type == 0)
+//        object2 = std::move(std::make_unique<Sphere>(sphereMesh[4], rng));
+//    else
+//        object2 = std::move(std::make_unique<Cube>(cubeMesh, rng));
+//    object2->scale(scale);
+//    object2->translate(trans);
+//
+//    std::cout << (object->intersects(object2.get()) ? "intersects" : "not intersects") << std::endl;
+//    std::cout << *object << std::endl;
+//    std::cout << *object2 << std::endl;
+//
+//    tobjects.push_back(std::move(object));
+//    tobjects.push_back(std::move(object2));
+//}
 
 void update() {
     const double t = glfwGetTime();
@@ -193,8 +239,11 @@ void update() {
     // an object moves only if it can move, that is,
     // i) the object does not go out of the boundary
     // ii) the object does not colide with other objects
+
+    // todo: clicked objects
     const auto& clickedObjects = objects;
     for (auto& object : clickedObjects) {
+        //octree.dump();
         object->updatePosition(window, camera, t);
         if (!octree.update(object.get()))
             object->revert();
@@ -209,6 +258,9 @@ void display() {
 
     for (auto& object : objects)
         object->draw(shader, window.getProjMat(), camera.getViewMat());
+
+    //for(auto& object: tobjects)
+    //    object->draw(shader, window.getProjMat(), camera.getViewMat());
 
     if(window.drawsOctree)
         octree.draw(window.getProjMat(), camera.getViewMat());
@@ -273,6 +325,10 @@ void key_callback(GLFWwindow* glfwWindow, int key, int scancode, int action, int
 
     window.isKeyPressed[key] = isPressed;
     window.tKey[key] = t;
+
+    //if (action == GLFW_PRESS && key == GLFW_KEY_SPACE) {
+    //    twoObjectTest();
+    //}
 }
 
 void scroll_callback(GLFWwindow* glfwWindow, double xoffset, double yoffset) {

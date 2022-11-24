@@ -20,4 +20,5 @@ public:
 	void updateMatrix();
 	void updateDirection();
 	void updatePosition(Window& window, double time);
+	void reset();
 };

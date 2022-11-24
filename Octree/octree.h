@@ -21,6 +21,7 @@ private:
 	int nodeID; // just the position in nodeList
 	int vIndex;
 
+	const bool isEmpty() const { return count == 0; }
 	const bool isLeaf() const { return count <= CAPACITY; }
 	std::array<Box, 1 << 3> makeSubBoxes(const std::array<float, 3>& center, const Box& boundary);
 public:
@@ -40,6 +41,8 @@ public:
 	bool update(SolidBody* object); // assumes object is in the octree
 	void remove(SolidBody* object); // assumes object is in the octree
 	bool intersects(SolidBody* object);
+
+	void dump();
 private:
 	const Box boundary;
 	OctreeNode* root;
@@ -66,6 +69,7 @@ private:
 	OctreeNode* makeNode(const std::array<float, 3>& center, const Box& boundary);
 	void insert(OctreeNode* node, SolidBody* object);
 	bool remove(OctreeNode* node, SolidBody* object);
-	void clean(OctreeNode* node);
+	std::unordered_set<SolidBody*> clean(OctreeNode* node);
 	bool intersects(OctreeNode* node, SolidBody* object);
+	void dump(OctreeNode* node);
 };

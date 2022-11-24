@@ -11,6 +11,8 @@ int initGLSL();
 int initObject();
 int initMisc();
 
+void makeObjects();
+
 void update();
 void display();
 void clean();
