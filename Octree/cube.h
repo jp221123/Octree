@@ -1,7 +1,6 @@
 #pragma once
 
 #include "object.h"
-#include "sphere.h"
 
 #include <iostream>
 #include <string>

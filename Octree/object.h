@@ -8,7 +8,6 @@
 #include "camera.h"
 
 #include <random>
-
 struct Box {
     std::array<float, 3> mins;
     std::array<float, 3> maxs;
@@ -44,8 +43,9 @@ protected:
 public:
     SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType);
 
+    bool isClicked{ false };
     const glm::mat4& modelMatrix() const { return model[stateIndex]; }
-    void updatePosition(Window& window, Camera& camera, double t);
+    void updatePosition(Window& window, const Camera& camera, double t);
     void revert();
 
     void draw(const SolidBodyShader& shader, const glm::mat4& projMat, const glm::mat4& viewMat);
@@ -61,6 +61,10 @@ public:
     bool intersects(const Box& box, const float MARGIN = -0.000'01f);
     // for safety, overestimate the boundary of the object
     bool containedInBoundary(const Box& box, const float MARGIN = 0.01f);
+
+    // if returns yes, the intersection is from + [t1Out...t2Out] * (to-from)
+    bool intersects(const glm::vec3& from, const glm::vec3& to, float& t1Out, float& t2Out);
+    static bool intersects(const Box& box, const glm::vec3& from, const glm::vec3& to, float& t1Out, float& t2Out);
 private:
     void update();
     void makeColor(std::mt19937& rng);

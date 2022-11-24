@@ -81,8 +81,6 @@ void SolidBody::draw(const SolidBodyShader& shader, const glm::mat4& projMat, co
 
     glBindVertexArray(vertexArrayID);
 
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
     glDrawElements(
         GL_TRIANGLES,      // mode
         numTriangles*3,    // count
@@ -90,13 +88,29 @@ void SolidBody::draw(const SolidBodyShader& shader, const glm::mat4& projMat, co
         (void*)0         // element array buffer offset
     );
 
+    if (isClicked) {
+        constexpr glm::vec3 WHITE{ 1.0f };
+        glUniform3fv(shader.ambientColorID, 1, &WHITE[0]);
+        glUniform3fv(shader.diffuseColorID, 1, &WHITE[0]);
+        glUniform3fv(shader.specularColorID, 1, &WHITE[0]);
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(
+            GL_TRIANGLES,      // mode
+            numTriangles * 3,    // count
+            GL_UNSIGNED_INT,   // type
+            (void*)0         // element array buffer offset
+        );
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+
     glUseProgram(0);
     glBindVertexArray(0);
 }
 
-void SolidBody::updatePosition(Window& window, Camera& camera, double t) {
+void SolidBody::updatePosition(Window& window, const Camera& camera, double t) {
     constexpr float speed = 0.5f;
-    const float dist = glm::length(worldPos[stateIndex] - camera.position);
+    const float dist = glm::length(worldPos[stateIndex] - camera.getPosition());
     const float sd = speed * dist;
 
     glm::vec3 trans(0.0f);
@@ -107,18 +121,20 @@ void SolidBody::updatePosition(Window& window, Camera& camera, double t) {
         }
     };
 
-    updatePositionKey(GLFW_KEY_W, camera.up*sd);
-    updatePositionKey(GLFW_KEY_S, camera.up*(-sd));
-    updatePositionKey(GLFW_KEY_A, camera.right*(-sd));
-    updatePositionKey(GLFW_KEY_D, camera.right*sd);
+    updatePositionKey(GLFW_KEY_W, camera.getUp() * sd);
+    updatePositionKey(GLFW_KEY_S, camera.getUp() * (-sd));
+    updatePositionKey(GLFW_KEY_A, camera.getRight() * (-sd));
+    updatePositionKey(GLFW_KEY_D, camera.getRight() * sd);
 
     translate(trans);
 }
 
 bool intersectss(const Sphere& sphere, const Sphere& other, const float MARGIN) {
     glm::vec3 diff = sphere.center() - other.center();
-    float dist = glm::length(diff);
-    return dist < sphere.radius() + other.radius() + MARGIN;
+    float dist2 = glm::dot(diff, diff);
+    // float dist = glm::length(diff);
+    float r = sphere.radius() + other.radius() + MARGIN;
+    return dist2 < r * r;
 }
 
 bool intersectss(const Sphere& sphere, const Box& box, const float MARGIN) {
@@ -142,8 +158,10 @@ bool intersectss(const Sphere& sphere, const Box& box, const float MARGIN) {
     glm::vec3 diff;
     for (int i = 0; i < 3; i++)
         diff[i] = closestPoint[i] - sphere.center()[i];
-    float dist = glm::length(diff);
-    return dist < sphere.radius() + MARGIN;
+    float dist2 = glm::dot(diff, diff);
+    //float dist = glm::length(diff);
+    float r = sphere.radius() + MARGIN;
+    return dist2 < r * r;
 }
 
 bool intersectss(const Box& box1, const Box& box2, const float MARGIN) {
@@ -243,6 +261,83 @@ bool SolidBody::containedInBoundary(const Box& box, const float MARGIN) {
     }
     assert(false);
     return false;
+}
+
+bool intersectss(const Sphere& sphere, const glm::vec3& from, const glm::vec3& to, float& t1, float& t2) {
+    // project diff to direction
+    glm::vec3 direction = to - from;
+    glm::vec3 diff = sphere.center() - from;
+    float len = glm::length(direction);
+    // r^2 = h^2 + a^2
+    // diff^2 = h^2 + proj^2
+    // r^2 - diff^2 = a^2 - proj^2
+    // a^2 = r^2 - diff^2 + proj^2
+    // 
+    // t = [proj - a .. proj + a]
+
+    float a = sphere.radius() * sphere.radius();
+    a -= glm::dot(diff, diff);
+    float proj = dot(direction, diff) / len;
+    a += proj * proj;
+    constexpr float EPS = 0.000'001;
+    if (a <= EPS)
+        return false;
+    a = std::sqrt(a);
+    float th = proj / len;
+    t1 = std::max(0.0f, th - a/len);
+    t2 = std::min(1.0f, th + a/len);
+    if (t1 > 1 || t2 < 0)
+        return false;
+    else
+        return true;
+}
+
+bool SolidBody::intersects(const glm::vec3& from, const glm::vec3& to, float& t1, float& t2) {
+    switch (classType) {
+    case SolidBodyType::CUBE: {
+        Cube* cube = (Cube*)this;
+        return SolidBody::intersects(cube->boundary(), from, to, t1, t2);
+    }
+    case SolidBodyType::SPHERE: {
+        Sphere* sphere = (Sphere*)this;
+        return intersectss(*sphere, from, to, t1, t2);
+    }
+    }
+    assert(false);
+    return false;
+}
+
+bool SolidBody::intersects(const Box& box, const glm::vec3& from, const glm::vec3& to, float& t1, float& t2) {
+    // project to each axis, i.e., parametrize min[i] and max[i] by from[i] + t*diff[i]
+    // the query range t is the overlapping part of those intervals
+
+    t1 = 0;
+    t2 = 1;
+
+    glm::vec3 diff = to - from;
+    for (int i = 0; i < 3; i++) {
+        if (from[i] < to[i]) {
+            if (box.maxs[i] < from[i])
+                return false;
+            if (box.mins[i] > to[i])
+                return false;
+            t1 = std::max(t1, (box.mins[i] - from[i]) / diff[i]);
+            t2 = std::min(t2, (box.maxs[i] - from[i]) / diff[i]);
+        }
+        else { // from[i] > to[i]
+            if (box.mins[i] > from[i])
+                return false;
+            if (box.maxs[i] < to[i])
+                return false;
+            t1 = std::max(t1, (box.maxs[i] - from[i]) / diff[i]);
+            t2 = std::min(t2, (box.mins[i] - from[i]) / diff[i]);
+        }
+    }
+
+    if (t1 > t2)
+        return false;
+    else
+        return true;
 }
 
 std::ostream& operator<<(std::ostream& os, const SolidBody& obj) {

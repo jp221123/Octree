@@ -17,9 +17,10 @@
 #include <iostream>
 #include <random>
 #include <chrono>
+#include <set>
 
 SolidBodyShader shader;
-Window window(nullptr);
+Window window;
 Camera camera;
 std::mt19937 rng;
 CubeMesh cubeMesh;
@@ -29,7 +30,16 @@ std::vector<SphereMesh> sphereMesh;
 constexpr float MAX_COORDINATE = 10.0f;
 Octree octree(MAX_COORDINATE);
 std::vector<std::unique_ptr<SolidBody>> objects;
+std::set<SolidBody*> clickedObjects;
 int main() {
+    constexpr int N_MIN = 1;
+    constexpr int N_MAX = 50000;
+    std::cout << "Enter the number of objects (1 ~ 50000)" << std::endl;
+    int N;
+    std::cin >> N;
+    N = std::min(N, N_MAX);
+    N = std::max(N, N_MIN);
+
     if (!initGL())
         return -1;
 
@@ -39,7 +49,7 @@ int main() {
     if (!initMisc())
         return -1;
 
-    initObject();
+    initObject(N);
 
     do {
         update();
@@ -71,7 +81,7 @@ int initGL() {
         glfwTerminate();
         return false;
     }
-    window = Window(glfwWindow);
+    window.init(glfwWindow);
     glfwGetFramebufferSize(glfwWindow, &window.width, &window.height);
 
     glfwMakeContextCurrent(window.glfwWindow); // Initialize GLEW
@@ -112,7 +122,7 @@ int initGLSL() {
     return true;
 }
 
-int initObject() {
+int initObject(int N) {
     constexpr int MAX_SUBDIVISION = 4;
     rng = std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count());
     cubeMesh = CubeMesh(rng);
@@ -120,19 +130,16 @@ int initObject() {
     for(int i=0; i<=MAX_SUBDIVISION; i++)
         sphereMesh.push_back(SphereMesh(rng, i));
 
-    makeObjects();
+    makeObjects(N);
 
     return true;
 }
 
 int initMisc() {
-
-
     return true;
 }
 
-void makeObjects() {
-    constexpr int N = 10000;
+void makeObjects(int N) {
     constexpr float MIN_SCALE = 0.001;
     constexpr float MAX_SCALE = 1.0;
 
@@ -186,67 +193,31 @@ void makeObjects() {
 
 }
 
-//std::vector<std::unique_ptr<SolidBody>> tobjects;
-//void twoObjectTest() {
-//    tobjects.clear();
-//    camera.reset();
-//
-//    constexpr float MIN_SCALE = 0.001;
-//    constexpr float MAX_SCALE = 1.0;
-//
-//    std::uniform_real_distribution<float> rDist(MIN_SCALE, MAX_SCALE);
-//    std::uniform_real_distribution<float> tDist(-MAX_COORDINATE + MAX_SCALE * 2, MAX_COORDINATE - MAX_SCALE * 2);
-//    std::uniform_int_distribution<int> dist(0, 1);
-//    tDist = std::uniform_real_distribution<float>(-1, 1);
-//    int type = dist(rng);
-//    float scale = rDist(rng);
-//    glm::vec3 trans = { tDist(rng), tDist(rng), tDist(rng) };
-//    std::unique_ptr<SolidBody> object;
-//    if (type == 0)
-//        object = std::move(std::make_unique<Sphere>(sphereMesh[4], rng));
-//    else
-//        object = std::move(std::make_unique<Cube>(cubeMesh, rng));
-//    object->scale(scale);
-//    object->translate(trans);
-//    type = dist(rng);
-//    scale = rDist(rng);
-//    trans = { tDist(rng), tDist(rng), tDist(rng) };
-//    std::unique_ptr<SolidBody> object2;
-//    if (type == 0)
-//        object2 = std::move(std::make_unique<Sphere>(sphereMesh[4], rng));
-//    else
-//        object2 = std::move(std::make_unique<Cube>(cubeMesh, rng));
-//    object2->scale(scale);
-//    object2->translate(trans);
-//
-//    std::cout << (object->intersects(object2.get()) ? "intersects" : "not intersects") << std::endl;
-//    std::cout << *object << std::endl;
-//    std::cout << *object2 << std::endl;
-//
-//    tobjects.push_back(std::move(object));
-//    tobjects.push_back(std::move(object2));
-//}
-
 void update() {
     const double t = glfwGetTime();
 
-    camera.updateDirection();
-    camera.updatePosition(window, t);
+    camera.move(window, t);
 
     camera.updateMatrix();
     window.updateMatrix();
 
     // an object moves only if it can move, that is,
     // i) the object does not go out of the boundary
-    // ii) the object does not colide with other objects
+    // ii) the object does not collide with other objects
 
-    // todo: clicked objects
-    const auto& clickedObjects = objects;
-    for (auto& object : clickedObjects) {
-        //octree.dump();
+    auto move = [&](SolidBody* object) {
         object->updatePosition(window, camera, t);
-        if (!octree.update(object.get()))
+        if (!octree.update(object))
             object->revert();
+    };
+
+    if (clickedObjects.empty()){
+        for (auto& object: objects)
+            move(object.get());
+    }
+    else {
+        for (auto object: clickedObjects)
+            move(object);
     }
 
     for (int key : {GLFW_KEY_W, GLFW_KEY_S, GLFW_KEY_A, GLFW_KEY_D})
@@ -256,11 +227,10 @@ void update() {
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // std::cout << clickedObjects.size() << std::endl;
+
     for (auto& object : objects)
         object->draw(shader, window.getProjMat(), camera.getViewMat());
-
-    //for(auto& object: tobjects)
-    //    object->draw(shader, window.getProjMat(), camera.getViewMat());
 
     if(window.drawsOctree)
         octree.draw(window.getProjMat(), camera.getViewMat());
@@ -284,34 +254,99 @@ void framebuffer_size_callback(GLFWwindow* glfwWindow, int newWidth, int newHeig
 }
 
 void mouse_button_callback(GLFWwindow* glfwWindow, int button, int action, int mods){
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        window.isMousePressed = true;
+    bool isPressed;
+    if (action == GLFW_PRESS)
+        isPressed = true;
+    else if (action == GLFW_RELEASE)
+        isPressed = false;
+    else
+        return;
+
+    switch (button) {
+    case GLFW_MOUSE_BUTTON_LEFT:
+        window.isLeftMousePressed = isPressed;
+        if (isPressed) {
+            auto [near, far] = window.pointToWorld(window.cursorX, window.cursorY, camera);
+            SolidBody* obj = octree.rayQuery(near, far);
+
+            if (obj == nullptr) {
+                if (window.isKeyPressed[GLFW_KEY_LEFT_SHIFT]) {
+                    // do nothing
+                }
+                else{
+                    // release all clicked objects
+                    for (auto object : clickedObjects)
+                        object->isClicked = false;
+                    clickedObjects.clear();
+                }
+            }
+            else {
+                if (window.isKeyPressed[GLFW_KEY_LEFT_SHIFT]) {
+                    if (clickedObjects.count(obj)) {
+                        obj->isClicked = false;
+                        clickedObjects.erase(obj);
+                    }
+                    else {
+                        obj->isClicked = true;
+                        clickedObjects.insert(obj);
+                    }
+                }
+                else {
+                    for (auto object : clickedObjects)
+                        object->isClicked = false;
+                    clickedObjects.clear();
+                    obj->isClicked = true;
+                    clickedObjects.insert(obj);
+                }
+            }
+        }
+        //  todo: implement range frustum query when dragging
+        //  need to find out clicked objects
+        //  clickedObjects = octree.frustumQuery(
+        //    camera.getPosition(),
+        //    window.rectToWorld(window.cursorX, window.cursorX2, window.cursorY, window.cursorY2, camera),
+        //    window.NEAR,
+        //    window.FAR);
+        break;
+    case GLFW_MOUSE_BUTTON_RIGHT:
+        window.isRightMousePressed = isPressed;
+        break;
     }
-    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
-        window.isMousePressed = false;
 }
 
 void cursor_position_callback(GLFWwindow* glfwWindow, double x, double y) {
     // glfwGetCursorPos(window, &xpos, &ypos);
-    if(!window.isMousePressed) {
+    if(!window.isLeftMousePressed && !window.isRightMousePressed) {
         window.cursorX = x;
         window.cursorY = y;
         return;
     }
 
-    float dx = x - window.cursorX;
-    float dy = y - window.cursorY;
-    window.cursorX = x;
-    window.cursorY = y;
+    if (window.isLeftMousePressed) {
+        window.cursorX2 = x;
+        window.cursorY2 = y;
+    }
+    else { // window.isRightMousePressed
+        float dx = x - window.cursorX;
+        float dy = y - window.cursorY;
+        window.cursorX = x;
+        window.cursorY = y;
 
-    // Compute new orientation
-    constexpr float speed = 0.001f;
-    camera.horizontalAngle += speed * dx;
-    camera.verticalAngle += speed * dy;
+        // Compute new orientation
+        constexpr float speed = 0.001f;
+        camera.move(speed * dx, speed * dy);
+    }
 }
 
 void key_callback(GLFWwindow* glfwWindow, int key, int scancode, int action, int mods) {
     double t = glfwGetTime();
+
+    if (action == GLFW_PRESS && key == GLFW_KEY_ENTER)
+        window.drawsOctree ^= true;
+
+    if (action == GLFW_PRESS && key == GLFW_KEY_SPACE)
+        camera.reset();
+
     bool isPressed;
     if (action == GLFW_RELEASE)
         isPressed = false;
@@ -319,10 +354,6 @@ void key_callback(GLFWwindow* glfwWindow, int key, int scancode, int action, int
         isPressed = true;
     else
         return;
-
-    if (action == GLFW_PRESS && key == GLFW_KEY_ENTER)
-        window.drawsOctree ^= true;
-
     window.isKeyPressed[key] = isPressed;
     window.tKey[key] = t;
 

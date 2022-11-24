@@ -3,6 +3,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 
+#include "window.h"
+
 Camera::Camera(glm::vec3 position):
     position(position){
     updateDirection();
@@ -10,17 +12,35 @@ Camera::Camera(glm::vec3 position):
 }
 
 void Camera::reset() {
-    horizontalAngle = 3.14f;
-    verticalAngle = 0.0f;
-    position = glm::vec3(0, 0, 5);
+    horizontalAngle = BASE_H_ANGLE;
+    verticalAngle = BASE_V_ANGLE;
+    position = BASE_POS;
+    updateDirection();
 }
 
-void Camera::updateMatrix() {
-    viewMat = glm::lookAt(
-        position,               // camera position
-        position + direction, // look-at position
-        up                          // up vector
-    );
+void Camera::move(float dHorizontalAngle, float dVerticalAngle) {
+    horizontalAngle += dHorizontalAngle;
+    verticalAngle += dVerticalAngle;
+    updateDirection();
+}
+
+void Camera::move(Window& window, double t) {
+    constexpr float speed = 3.0f;
+
+    auto updatePositionKey = [&](int key, glm::vec3 base) {
+        if (window.isKeyPressed[key]) {
+            float dt = t - window.tKey[key];
+            window.tKey[key] = t;
+            position += base * dt * speed;
+        }
+    };
+
+    updatePositionKey(GLFW_KEY_UP, up);
+    updatePositionKey(GLFW_KEY_DOWN, -up);
+    updatePositionKey(GLFW_KEY_LEFT, -right);
+    updatePositionKey(GLFW_KEY_RIGHT, right);
+
+    updateDirection();
 }
 
 void Camera::updateDirection() {
@@ -39,19 +59,10 @@ void Camera::updateDirection() {
     up = glm::cross(right, direction);
 }
 
-void Camera::updatePosition(Window& window, double t){
-    constexpr float speed = 3.0f;
-
-    auto updatePositionKey = [&](int key, glm::vec3 base) {
-        if (window.isKeyPressed[key]) {
-            float dt = t - window.tKey[key];
-            window.tKey[key] = t;
-            position += base * dt * speed;
-        }
-    };
-
-    updatePositionKey(GLFW_KEY_UP, up);
-    updatePositionKey(GLFW_KEY_DOWN, -up);
-    updatePositionKey(GLFW_KEY_LEFT, -right);
-    updatePositionKey(GLFW_KEY_RIGHT, right);
+void Camera::updateMatrix() {
+    viewMat = glm::lookAt(
+        position,               // camera position
+        position + direction, // look-at position
+        up                          // up vector
+    );
 }

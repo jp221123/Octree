@@ -8,10 +8,9 @@ int main();
 
 int initGL();
 int initGLSL();
-int initObject();
+int initObject(int);
+void makeObjects(int);
 int initMisc();
-
-void makeObjects();
 
 void update();
 void display();

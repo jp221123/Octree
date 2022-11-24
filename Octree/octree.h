@@ -17,7 +17,7 @@ private:
 	const std::array<float, 3> center;
 	Box boundary;
 	const std::array<Box, 1<<3> subBoxes;
-	std::array<OctreeNode*, 8> children;
+	std::array<OctreeNode*, 1<<3> children;
 	int nodeID; // just the position in nodeList
 	int vIndex;
 
@@ -41,6 +41,8 @@ public:
 	bool update(SolidBody* object); // assumes object is in the octree
 	void remove(SolidBody* object); // assumes object is in the octree
 	bool intersects(SolidBody* object);
+	SolidBody* rayQuery(const glm::vec3&, const glm::vec3&);
+	std::vector<SolidBody*> frustumQuery(glm::vec3 from, std::array<glm::vec3, 4> to, float near, float far);
 
 	void dump();
 private:
@@ -71,5 +73,8 @@ private:
 	bool remove(OctreeNode* node, SolidBody* object);
 	std::unordered_set<SolidBody*> clean(OctreeNode* node);
 	bool intersects(OctreeNode* node, SolidBody* object);
+	SolidBody* rayQuery(OctreeNode* node, const glm::vec3&, const glm::vec3&);
+	std::unordered_set<SolidBody*> frustumQuery(OctreeNode* node, const glm::vec3& from, const std::array<glm::vec3, 4>& to, float near, float far);
+
 	void dump(OctreeNode* node);
 };

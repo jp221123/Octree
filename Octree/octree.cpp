@@ -205,6 +205,18 @@ bool Octree::intersects(SolidBody* object) {
     return intersects(root, object);
 }
 
+// assumption: from will not be used after this
+void merge(std::unordered_set<SolidBody*>& to, std::unordered_set<SolidBody*>& from) {
+    if (to.size() < from.size())
+        std::swap(from, to);
+    // to.size >= from.size
+    to.insert(from.begin(), from.end());
+}
+
+void merge(std::unordered_set<SolidBody*>& to, std::unordered_set<SolidBody*>&& from) {
+    merge(to, from);
+}
+
 // remove all nodes under node
 // overwrite the vbo and ibo
 // -- move the last vertices and indices
@@ -232,8 +244,7 @@ std::unordered_set<SolidBody*> Octree::clean(OctreeNode* node) {
     for (int i = 0; i < 1 << 3; i++) {
         if (node->children[i] == nullptr)
             continue;
-        auto childrenObjects = clean(node->children[i]);
-        node->objects.insert(childrenObjects.begin(), childrenObjects.end());
+        merge(node->objects, clean(node->children[i]));
     }
     std::unordered_set<SolidBody*> res;
     std::swap(res, node->objects);
@@ -260,10 +271,7 @@ bool Octree::remove(OctreeNode* node, SolidBody* object) {
             for (int i = 0; i < 1 << 3; i++) {
                 if (node->children[i] == nullptr)
                     continue;
-                // of course, we have to pull up recursively
-                // node->objects.insert(node->children[i]->objects.begin(), node->children[i]->objects.end());
-                auto objects = clean(node->children[i]);
-                node->objects.insert(objects.begin(), objects.end());
+                merge(node->objects, clean(node->children[i]));
                 node->children[i] = nullptr;
             }
             node->objects.erase(object);
@@ -315,6 +323,66 @@ bool Octree::update(SolidBody* object)
     bool res = insert(object, true);
     assert(res);
     return res;
+}
+
+SolidBody* Octree::rayQuery(OctreeNode* node, const glm::vec3& near, const glm::vec3& far) {
+    if (node == nullptr)
+        return nullptr;
+
+    if (node->isLeaf()) {
+        std::vector<std::pair<float, SolidBody*>> parameters;
+        for (auto object : node->objects) {
+            float t1, t2;
+            if (object->intersects(near, far, t1, t2))
+                parameters.push_back({ t1, object });
+        }
+        if (parameters.empty())
+            return nullptr;
+        else {
+            float min = parameters[0].first;
+            SolidBody* sb = parameters[0].second;
+            for (auto& tsb : parameters) {
+                if (tsb.first < min) {
+                    min = tsb.first;
+                    sb = tsb.second;
+                }
+            }
+            return sb;
+        }
+    }
+
+    // todo: improve here
+    // currently using a bit inefficient (by a constant factor between 2 and 4) but simpler logic:
+    // intersection test for all sub-boxes, sort by parameter
+    std::vector<std::pair<float, OctreeNode*>> childrenToExplore;
+    for (int i = 0; i < 1 << 3; i++) {
+        float t1, t2;
+        if (SolidBody::intersects(node->subBoxes[i], near, far, t1, t2))
+            childrenToExplore.push_back({ t1, node->children[i] });
+    }
+    std::sort(childrenToExplore.begin(), childrenToExplore.end());
+    for (auto& tn : childrenToExplore) {
+        auto res = rayQuery(tn.second, near, far);
+        if (res != nullptr)
+            return res;
+    }
+    return nullptr;
+}
+
+SolidBody* Octree::rayQuery(const glm::vec3& near, const glm::vec3& far) {
+    return rayQuery(root, near, far);
+}
+
+std::unordered_set<SolidBody*> Octree::frustumQuery(OctreeNode* node, const glm::vec3& from, const std::array<glm::vec3, 4>& to, float near, float far) {
+    return std::unordered_set<SolidBody*>();
+}
+
+std::vector<SolidBody*> Octree::frustumQuery(glm::vec3 from, std::array<glm::vec3, 4> to, float near, float far) {
+    assert(false && "not supported yet");
+    if (root == nullptr)
+        return {};
+    auto res = frustumQuery(root, from, to, near, far);
+    return std::vector<SolidBody*>(res.begin(), res.end());
 }
 
 void Octree::init(){
@@ -379,10 +447,10 @@ void Octree::draw(const glm::mat4& projMat, const glm::mat4& viewMat) {
 void Octree::updateBuffer(){
     glBindVertexArray(vertexArrayID);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_DYNAMIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_DYNAMIC_DRAW);
     glBindVertexArray(0);
 }
 
@@ -392,7 +460,7 @@ void Octree::bind(){
 
     glGenBuffers(1, &vertexBufferID);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBufferID);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(
         0,                  // attribute #
@@ -405,7 +473,7 @@ void Octree::bind(){
 
     glGenBuffers(1, &elementBufferID);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_DYNAMIC_DRAW);
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
