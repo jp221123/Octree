@@ -40,14 +40,18 @@ protected:
     glm::vec3 ambientColor, diffuseColor, specularColor;
     float shininess;
     bool isDirty{ true };
+private:
+    double t{ 0 };
+public:
+    glm::vec3 movingDirection;
+    bool isClicked{ false };
 public:
     SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType);
-
-    bool isClicked{ false };
     const glm::mat4& modelMatrix() const { return model[stateIndex]; }
     void updatePosition(Window& window, const Camera& camera, double t);
     void revert();
 
+    void makeRandomMovingDirection(std::mt19937& rng);
     void draw(const SolidBodyShader& shader, const glm::mat4& projMat, const glm::mat4& viewMat);
 
     void scale(float s);

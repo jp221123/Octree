@@ -17,6 +17,7 @@ public:
 	const float NEAR = 0.1f;
 	const float FAR = 100.0f;
 
+	bool randomMoves{ false };
 	bool drawsOctree{ true };
 
 	double cursorX, cursorY;

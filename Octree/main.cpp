@@ -207,18 +207,14 @@ void update() {
 
     auto move = [&](SolidBody* object) {
         object->updatePosition(window, camera, t);
-        if (!octree.update(object))
+        if (!octree.update(object)) {
             object->revert();
+            object->makeRandomMovingDirection(rng);
+        }
     };
 
-    if (clickedObjects.empty()){
-        for (auto& object: objects)
-            move(object.get());
-    }
-    else {
-        for (auto object: clickedObjects)
-            move(object);
-    }
+    for (auto& object : objects)
+        move(object.get());
 
     for (int key : {GLFW_KEY_W, GLFW_KEY_S, GLFW_KEY_A, GLFW_KEY_D})
         window.tKey[key] = t;
@@ -341,8 +337,11 @@ void cursor_position_callback(GLFWwindow* glfwWindow, double x, double y) {
 void key_callback(GLFWwindow* glfwWindow, int key, int scancode, int action, int mods) {
     double t = glfwGetTime();
 
-    if (action == GLFW_PRESS && key == GLFW_KEY_ENTER)
+    if (action == GLFW_PRESS && key == GLFW_KEY_O)
         window.drawsOctree ^= true;
+
+    if (action == GLFW_PRESS && key == GLFW_KEY_ENTER)
+        window.randomMoves ^= true;
 
     if (action == GLFW_PRESS && key == GLFW_KEY_SPACE)
         camera.reset();

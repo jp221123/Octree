@@ -8,6 +8,13 @@
 SolidBody::SolidBody(Mesh& mesh, std::mt19937& rng, SolidBodyType classType)
     : vertexArrayID(mesh.getVertexArrayID()), numTriangles(mesh.getNumTriangles()), classType(classType) {
     makeColor(rng);
+    makeRandomMovingDirection(rng);
+}
+
+void SolidBody::makeRandomMovingDirection(std::mt19937& rng) {
+    constexpr float speed = 0.5f;
+    std::uniform_real_distribution<float> tDist(-speed, speed);
+    movingDirection = { tDist(rng), tDist(rng), tDist(rng) };
 }
 
 void SolidBody::makeColor(std::mt19937& rng){
@@ -121,11 +128,18 @@ void SolidBody::updatePosition(Window& window, const Camera& camera, double t) {
         }
     };
 
-    updatePositionKey(GLFW_KEY_W, camera.getUp() * sd);
-    updatePositionKey(GLFW_KEY_S, camera.getUp() * (-sd));
-    updatePositionKey(GLFW_KEY_A, camera.getRight() * (-sd));
-    updatePositionKey(GLFW_KEY_D, camera.getRight() * sd);
+    if (isClicked) {
+        updatePositionKey(GLFW_KEY_W, camera.getUp() * sd);
+        updatePositionKey(GLFW_KEY_S, camera.getUp() * (-sd));
+        updatePositionKey(GLFW_KEY_A, camera.getRight() * (-sd));
+        updatePositionKey(GLFW_KEY_D, camera.getRight() * sd);
+    }
+    else if (window.randomMoves) {
+        float dt = t - this->t;
+        trans += movingDirection * dt;
+    }
 
+    this->t = t;
     translate(trans);
 }
 
