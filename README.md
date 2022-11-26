@@ -45,7 +45,7 @@ Note that all objects are fat right now. The bound for octrees depends on the sp
 
 - Generate the octree subdivision lines only with the debug argument.
 
-The slow-down caused by the number of subdivision lines is not severe but still noticeable, but the current code needs to be refactored not to draw those lines.
+The slow-down caused by the number of subdivision lines is not severe but still noticeable, but the current code needs to be refactored not to generate those lines at all.
 
 - Support the range frustum queries for left click drag.
 
