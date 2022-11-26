@@ -1,6 +1,6 @@
 # Octree
 
-Dynamic octree implementation with openGL.
+Dynamic octree implementation with OpenGL 3.x
 
 ## Supported objects
 - Spheres of various sizes
