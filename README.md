@@ -7,13 +7,15 @@ Dynamic octree implementation with openGL.
 - Axis-aligned cubes of various sizes
 
 ## Supported queries of octrees
-- Insertion, update, or removal of a single object
+- Insertion, update, or removal of an object
 - Collision test for an object (against the objects in the octree)
 - Collision test for a ray (or rather an oriented segment)
 
 ## Supported functions
-- All objects randomly move (to show the efficiency)
+- Toggle whether all objects randomly move (to show the efficiency) or not
 - Select the objects and manually translate them: an object stops moving once it collides with something else
+- Show/hide the octree structure
+- Move the camera
 
 ## Demo and usage
 The usage can be found in the binary file.
@@ -26,7 +28,7 @@ Octree node capacity = 10 (default)
 ### Demo - small
 100 objects
 
-Octree node capacity = 1 (to show the structure change better)
+Octree node capacity = 1 (to show the structure changes better)
 
 ## Some design decisions
 There are some design decisions to make when implementing octrees.
