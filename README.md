@@ -32,7 +32,7 @@ Octree node capacity = 1 (to show the structure changes better)
 
 ## Some design decisions
 There are some design decisions to make when implementing octrees.
-- The default capacity of an octree node is 10 (though rather arbitrarily determined). That is, when an octree node intersects with more than 10 objects, it is subdivided into 8 nodes and become an internal node.
+- The default capacity of an octree node is 10 (though rather arbitrarily determined). That is, when a leaf node intersects with more than 10 objects, it is subdivided into 8 nodes and becomes an internal node.
 - Each leaf node maintains a list of objects intersecting to its bounding box.
 - The octree doesn't allow intersecting objects to be inserted at all.
 - Thus, persistency is delegated to objects.
