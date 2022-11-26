@@ -18,7 +18,7 @@ Dynamic octree implementation with openGL.
 - Move the camera
 
 ## Demo and usage
-The usage can be found in the binary file.
+Once $n$ is entered, $n$ objects are randomly generated and they can move inside the big bounding box according to the user input. The detailed usage can be found in the binary file.
 
 ### Demo - big
 10,000 objects
